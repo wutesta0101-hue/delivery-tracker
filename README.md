@@ -110,6 +110,9 @@ Horizontal bar per order group: green = effective riding time, blue = empty ridi
 | Route distance | OSRM (free, no key) |
 | Export | SheetJS (xlsx) |
 
+> **Note:** The current App is a single-file MVP built for rapid iteration.
+> A component-based refactor is planned as the next development milestone.
+
 ### Environment Detection
 
 The same codebase runs in both environments. Storage backend switches automatically:
