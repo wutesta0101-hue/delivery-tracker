@@ -145,7 +145,7 @@ A desktop web tool that ingests the Excel file exported by the App and produces 
 delivery-tracker/
 ├── app/
 │   └── delivery-tracker.apk     ← Android APK (direct install)
-├── analyzer/
+├── docs/
 │   └── index.html               ← Web analyzer (GitHub Pages)
 └── README.md
 ```
