@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>外送資料分析</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0f1a;
+    --surface: #111827;
+    --border: #1e2a3a;
+    --text: #f0f0f0;
+    --text-dim: #4b5563;
+    --text-sec: #9ca3af;
+    --green: #3CB99A;
+    --yellow: #F5A623;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --pink: #f472b6;
+    --red: #C8373A;
+    --gray: #9ca3af;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header .title { font-size: 15px; font-weight: 700; color: var(--green); letter-spacing: 2px; }
+  header .sub   { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
+
+  /* 上傳區 */
+  #dropzone {
+    margin: 32px auto;
+    max-width: 480px;
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  #dropzone.hover { border-color: var(--green); background: rgba(60,185,154,0.05); }
+  #dropzone .icon { font-size: 40px; margin-bottom: 12px; }
+  #dropzone .hint { font-size: 13px; color: var(--text-sec); margin-bottom:8px; }
+  #dropzone .sub  { font-size: 11px; color: var(--text-dim); }
+  #fileInput { display: none; }
+
+  /* 摘要卡片 */
+  #summary {
+    display: none;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    max-width: 1200px;
+    margin: 0 auto 24px;
+    padding: 0 16px;
+  }
+  .card {
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+  }
+  .card .label { font-size: 10px; color: var(--text-sec); letter-spacing: 1px; margin-bottom: 4px; }
+  .card .value { font-size: 20px; font-weight: 700; }
+
+  /* 圖表區 */
+  #charts {
+    display: none;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+  }
+  .chart-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .chart-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .chart-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+  svg { display: block; width: 100%; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .legend span { font-size: 14px; color: var(--text-sec); }
+
+  /* 圖表左右並排容器 */
+  .chart-side {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .chart-side svg {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .side-legend {
+    flex: 0 0 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+  }
+  .side-legend .leg-group-title {
+    font-size: 12px;
+    color: var(--text-sec);
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+    margin-top: 8px;
+  }
+  .side-legend .leg-group-title:first-child { margin-top: 0; }
+  .side-legend .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-sec);
+  }
+  .side-legend .leg-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .side-legend .leg-rect {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+  }
+  .side-legend .leg-tri {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    flex-shrink: 0;
+  }
+  .side-legend .leg-line {
+    width: 18px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  /* 大小圖例泡泡 */
+  .size-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .size-bubble {
+    border-radius: 50%;
+    background: var(--gray);
+    opacity: 0.75;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 700px) {
+    .chart-side { flex-direction: column; }
+    .side-legend { flex: unset; width: 100%; flex-direction: row; flex-wrap: wrap; }
+  }
+
+  /* 橫條圖 */
+  .bar-row { margin-bottom: 10px; }
+  .bar-label { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .bar-label .seg { font-size: 11px; }
+  .bar-label .val { font-size: 11px; color: var(--text-sec); font-variant-numeric: tabular-nums; }
+  .bar-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+
+  @media (max-width: 600px) {
+    #summary { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="title">外送資料分析</div>
+    <div class="sub">DELIVERY DATA ANALYZER</div>
+  </div>
+</header>
+
+<!-- 上傳區 -->
+<div id="dropzone" onclick="document.getElementById('fileInput').click()">
+  <div class="icon">📊</div>
+  <div class="hint">點擊或拖曳 Excel 檔案至此</div>
+  <div class="sub">支援 .xlsx / .xls 格式</div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls"/>
+</div>
+
+<!-- 摘要 -->
+<div id="summary">
+  <div class="card"><div class="label">送達筆數</div><div class="value" id="s-deliveries" style="color:var(--green)">—</div></div>
+  <div class="card"><div class="label">今日收入</div><div class="value" id="s-revenue"    style="color:var(--yellow)">—</div></div>
+  <div class="card"><div class="label">騎乘距離</div><div class="value" id="s-dist"       style="color:var(--blue)">—</div></div>
+  <div class="card"><div class="label">工作時間</div><div class="value" id="s-time"       style="color:var(--purple)">—</div></div>
+</div>
+
+<!-- 圖表 -->
+<div id="charts">
+
+  <!-- 圖一：地理軌跡 -->
+  <div class="chart-box">
+    <div class="chart-title">地理軌跡圖</div>
+    <div class="chart-sub">各節點位置與路段連線，顏色代表段落語意</div>
+    <div class="chart-side">
+      <svg id="svg-geo" viewBox="0 0 760 500" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-geo"></div>
+    </div>
+  </div>
+
+  <!-- 圖二：時間瓶頸 -->
+  <div class="chart-box">
+    <div class="chart-title">時間瓶頸分析</div>
+    <div class="chart-sub">各段落類型總耗時（秒），降序排列</div>
+    <div id="bar-chart"></div>
+  </div>
+
+  <!-- 圖三：單趟散佈圖 -->
+  <div class="chart-box">
+    <div class="chart-title">單趟距離 vs 時間散佈圖</div>
+    <div class="chart-sub">每點 = 一筆取餐→送達　X 軸：距離(m)　Y 軸：時間(秒)　點大小：外送金額　顏色：訂單組</div>
+    <div class="chart-side">
+      <svg id="svg-scatter" viewBox="0 0 760 520" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-scatter"></div>
+    </div>
+  </div>
+
+  <!-- 圖四：雙折線圖 -->
+  <div class="chart-box">
+    <div class="chart-title">Revenue &amp; Distance Burn Rate</div>
+    <div class="chart-sub">累積收益與里程消耗趨勢　左軸：距離(m)　右軸：收益(NTD)　最右軸：累計 NTD/km（效率）</div>
+    <svg id="svg-burn" viewBox="0 0 960 320" style="background:#0a0a0a;border-radius:8px;"></svg>
+    <div class="legend">
+      <span style="color:#60a5fa">● 累積距離</span>
+      <span style="color:#F5A623">■ 累積收益</span>
+      <span style="color:#3CB99A">◆ 累計 NTD/km（效率）</span>
+    </div>
+  </div>
+
+  <!-- 圖四點七：NTD/min 時間效率折線圖 -->
+  <div class="chart-box">
+    <div class="chart-title">時間效率分析（NTD/min）</div>
+    <div class="chart-sub">左軸：累計 NTD/min（綠實線）　右軸：瞬時 NTD/min（橙菱形，每筆送達）</div>
+    <svg id="svg-ntdmin" viewBox="0 0 900 320" style="background:#0a0a0a;border-radius:8px;"></svg>
+    <div class="legend">
+      <span style="color:#3CB99A">— 累計 NTD/min</span>
+      <span style="color:#F5A623">◆ 瞬時 NTD/min（每筆送達）</span>
+    </div>
+  </div>
+
+  <!-- 圖四點五：空車率雙軸折線圖 -->
+  <div class="chart-box">
+    <div class="chart-title">空車率分析</div>
+    <div class="chart-sub">每小時　左軸：距離(km)　右軸：空車率(%)　藍=有貨距離　灰=空車距離　橙折線=空車率</div>
+    <svg id="svg-empty-rate" viewBox="0 0 900 320" style="background:#0a0a0a;border-radius:8px;"></svg>
+    <div class="legend">
+      <span style="color:#3CB99A">● 有貨距離(km)</span>
+      <span style="color:#9ca3af">● 空車距離(km)</span>
+      <span style="color:#F5A623">◆ 空車率(%)</span>
+    </div>
+  </div>
+
+  <!-- 圖五：Distance Efficiency -->
+  <div class="chart-box">
+    <div class="chart-title">Distance Efficiency</div>
+    <div class="chart-sub">單趟金額與距離比　粉線=全組回歸　綠線=高效組回歸（前25%）　虛線圓=離群值</div>
+    <div class="chart-side">
+      <svg id="svg-dist-eff" viewBox="0 0 760 480" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-dist-eff"></div>
+    </div>
+  </div>
+
+  <!-- 圖六：Time Efficiency -->
+  <div class="chart-box">
+    <div class="chart-title">Time Efficiency</div>
+    <div class="chart-sub">單趟金額與時間比　粉線=全組回歸　綠線=高效組回歸（前25%）　虛線圓=離群值</div>
+    <div class="chart-side">
+      <svg id="svg-time-eff" viewBox="0 0 760 480" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-time-eff"></div>
+    </div>
+  </div>
+
+  <!-- 圖七：工作時段分佈 -->
+  <div class="chart-box">
+    <div class="chart-title">工作時段分佈</div>
+    <div class="chart-sub">每小時切片　各路段語意著色　Y 軸：分鐘（0–60）　顏色：路段語意</div>
+    <div class="chart-side">
+      <svg id="svg-timeline" viewBox="0 0 900 400" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-timeline"></div>
+    </div>
+  </div>
+
+  <!-- 圖八：每組工時結構堆疊圖 -->
+  <div class="chart-box">
+    <div class="chart-title">每組工時結構</div>
+    <div class="chart-sub">每組一條　X 軸：分鐘　綠=有效工時　藍=空車工時　灰=組間等待</div>
+    <div class="chart-side">
+      <svg id="svg-bundle-stack" viewBox="0 0 760 400" style="background:#0a0a0a;border-radius:8px;"></svg>
+      <div class="side-legend" id="legend-bundle-stack"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── 顏色對照 ────────────────────────────────────
+const SEG_COLOR = {
+  '等單段':'#a78bfa', '接單段':'#60a5fa', '取餐段':'#F5A623', '取送段':'#3CB99A',
+  '夾取段':'#F5A623', '插單段':'#f472b6', '回頭段':'#9ca3af',
+  '移動段':'#F5A623', '中斷段':'#C8373A', '取消段':'#C8373A',
+  '起點':'#374151',
+};
+const TYPE_COLOR = {
+  '蹲點':'#3CB99A', '平台通知':'#a78bfa', '取餐':'#F5A623', '送達':'#3CB99A',
+};
+
+// ── 拖曳上傳 ────────────────────────────────────
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('hover'); });
+dz.addEventListener('dragleave', ()=> dz.classList.remove('hover'));
+dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('hover'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('fileInput').addEventListener('change', e=> handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type:'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval:'' });
+    const rows = raw.filter(r => String(r['序號']||'').trim() !== '合計' && String(r['序號']||'').trim() !== '');
+    processData(rows);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function num(v) { const n = parseFloat(String(v||'').replace(/[^\d.\-]/g,'')); return isNaN(n)?0:n; }
+
+function processData(rows) {
+  // 整理每筆資料
+  const data = rows.map(r => ({
+    idx:    num(r['序號']),
+    type:   String(r['類型']||'').trim(),
+    seg:    String(r['路段語意']||'').trim(),
+    bundleId: String(r['訂單組']||'').trim(),
+    timeStr: String(r['節點時間']||'').trim(),
+    lat:    num(r['緯度']),
+    lng:    num(r['經度']),
+    fee:    num(r['外送金額_NT']),
+    dist:   (() => { const v = String(r['距上一點_公尺']||'').trim(); return (v==='' || v==='起點') ? 0 : num(v); })(),
+    sec:    num(r['距上段時間_秒']),
+    waitSec: num(r['等單秒數']),
+    dist_total: num(r['累計距離_公尺']||r['totalDist']||0),
+    district: String(r['行政區']||'').trim(),
+  })).sort((a,b)=>a.idx-b.idx);
+
+  // ── 摘要 ────────────────────────────
+  const deliveries = data.filter(d=>d.type==='送達');
+  const revenue    = deliveries.reduce((s,d)=>s+d.fee,0);
+  const totalDistM = data.length>0 ? (data[data.length-1].dist_total||data.reduce((s,d)=>s+d.dist,0)) : 0;
+  const totalSec   = data.reduce((s,d)=>s+d.sec,0);
+
+  document.getElementById('s-deliveries').textContent = deliveries.length + ' 筆';
+  document.getElementById('s-revenue').textContent    = 'NT$' + revenue;
+  document.getElementById('s-dist').textContent       = (totalDistM/1000).toFixed(1) + ' km';
+  document.getElementById('s-time').textContent       = Math.floor(totalSec/60) + ' 分';
+
+  document.getElementById('dropzone').style.display = 'none';
+  document.getElementById('summary').style.display  = 'grid';
+  document.getElementById('charts').style.display   = 'flex';
+
+  drawGeo(data);
+  drawBar(data);
+  drawScatter(data);
+  drawBurnRate(data);
+  drawNtdMin(data);
+  drawEmptyRate(data);
+  drawDistEff(data);
+  drawTimeEff(data);
+  drawTimeline(data);
+  drawBundleStack(data);
+}
+
+// ── 圖一：地理軌跡 ───────────────────────────────
+function drawGeo(data) {
+  const geoData = data.filter(d=>d.lat && d.lng);
+  if (geoData.length < 2) return;
+
+  // 座標範圍（全資料，固定不隨篩選變動，避免視圖跳動）
+  const lats = geoData.map(d=>d.lat), lngs = geoData.map(d=>d.lng);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats);
+  const minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+  const latR=(maxLat-minLat)||0.01, lngR=(maxLng-minLng)||0.01;
+  const pad=0.09;
+  const W=760, H=500;
+  const toX = lng => ((lng-minLng+lngR*pad)/(lngR*(1+2*pad)))*W;
+  const toY = lat => H - ((lat-minLat+latR*pad)/(latR*(1+2*pad)))*H;
+
+  const bundles = [...new Set(geoData.map(d=>d.bundleId).filter(Boolean))];
+
+  // ── 時段上色：時間範圍 & 顏色計算 ──────────────────
+  const timeSecs = geoData.map(d=>timeStrToSec(d.timeStr)).filter(v=>v!==null);
+  const minTimeSec = timeSecs.length ? Math.min(...timeSecs) : 0;
+  const maxTimeSec = timeSecs.length ? Math.max(...timeSecs) : 1;
+
+  function getTimeColor(timeStr) {
+    const sec = timeStrToSec(timeStr);
+    if (sec === null) return '#9ca3af';
+    const t = Math.max(0, Math.min(1, (sec - minTimeSec) / Math.max(maxTimeSec - minTimeSec, 1)));
+    const hue = (240 + t * 180) % 360;   // 深藍(240) → 紫 → 橘 → 黃(60)
+    const lightness = 40 + t * 15;
+    return `hsl(${hue}, 100%, ${lightness}%)`;
+  }
+
+  let currentMode   = 'bundle';
+  let currentBundle = 'all';
+
+  // ── 重繪 SVG ────────────────────────────────────────
+  function renderGeoSvg(selectedBundle, colorMode) {
+    const svg = document.getElementById('svg-geo');
+    let html = '';
+
+    // 格線（經緯度刻度）
+    [0.25,0.5,0.75,1].forEach(f => {
+      const lngV = (minLng+f*lngR).toFixed(4);
+      const latV = (minLat+f*latR).toFixed(4);
+      const x = toX(minLng+f*lngR), y = toY(minLat+f*latR);
+      html += `<line x1="${x}" y1="0" x2="${x}" y2="${H-18}" stroke="#1e2a3a" stroke-width="1"/>`;
+      html += `<line x1="38" y1="${y}" x2="${W}" y2="${y}" stroke="#1e2a3a" stroke-width="1"/>`;
+      html += `<text x="${x}" y="${H-5}" text-anchor="middle" font-size="9" fill="#4b5563">${lngV}</text>`;
+      html += `<text x="36" y="${y+3}" text-anchor="end" font-size="9" fill="#4b5563">${latV}</text>`;
+    });
+
+    // 篩選：時段模式顯示全部；訂單組模式依篩選
+    const visible = geoData.filter(d =>
+      colorMode === 'time' ||
+      !d.bundleId || selectedBundle === 'all' || d.bundleId === selectedBundle
+    );
+
+    // 連線（顏色依模式）
+    visible.slice(1).forEach((d,i) => {
+      const prev = visible[i];
+      const color = colorMode === 'time'
+        ? getTimeColor(d.timeStr)
+        : (d.bundleId ? getBundleColor(d.bundleId) : (SEG_COLOR[d.seg]||'#374151'));
+      html += `<line x1="${toX(prev.lng)}" y1="${toY(prev.lat)}" x2="${toX(d.lng)}" y2="${toY(d.lat)}" stroke="${color}" stroke-width="1.5" stroke-opacity="0.8"/>`;
+    });
+
+    // 箭頭方向
+    visible.slice(1).forEach((d,i) => {
+      const prev = visible[i];
+      const mx=(toX(prev.lng)+toX(d.lng))/2, my=(toY(prev.lat)+toY(d.lat))/2;
+      const dx=toX(d.lng)-toX(prev.lng), dy=toY(d.lat)-toY(prev.lat);
+      const len=Math.sqrt(dx*dx+dy*dy)||1;
+      const nx=dx/len*5, ny=dy/len*5;
+      const color = colorMode === 'time'
+        ? getTimeColor(d.timeStr)
+        : (d.bundleId ? getBundleColor(d.bundleId) : (SEG_COLOR[d.seg]||'#374151'));
+      html += `<polygon points="${mx+nx},${my+ny} ${mx-ny-nx/2},${my+nx-ny/2} ${mx+ny-nx/2},${my-nx-ny/2}" fill="${color}" opacity="0.7"/>`;
+    });
+
+    // 節點（形狀依類型，顏色依模式）
+    visible.forEach(d => {
+      const x=toX(d.lng), y=toY(d.lat);
+      const c = colorMode === 'time'
+        ? getTimeColor(d.timeStr)
+        : (d.bundleId ? getBundleColor(d.bundleId) : (TYPE_COLOR[d.type]||'#9ca3af'));
+      if      (d.type==='蹲點')  html += `<circle cx="${x}" cy="${y}" r="4" fill="${c}" opacity="0.9"/>`;
+      else if (d.type==='取餐')  html += `<rect x="${x-3}" y="${y-3}" width="6" height="6" fill="${c}" opacity="0.9"/>`;
+      else if (d.type==='送達')  html += `<polygon points="${x},${y-5} ${x+4},${y+3} ${x-4},${y+3}" fill="${c}" opacity="0.9"/>`;
+      else                        html += `<circle cx="${x}" cy="${y}" r="3" fill="${c}" opacity="0.7"/>`;
+    });
+
+    if (colorMode === 'time') {
+      // 時段模式：整點標示
+      const minHour = Math.floor(minTimeSec / 3600);
+      const maxHour = Math.ceil(maxTimeSec  / 3600);
+      for (let h = minHour; h <= maxHour; h++) {
+        const hSec = h * 3600;
+        let closest = null, minDiff = Infinity;
+        geoData.forEach(d => {
+          const sec = timeStrToSec(d.timeStr);
+          if (sec === null) return;
+          const diff = Math.abs(sec - hSec);
+          if (diff < minDiff) { minDiff = diff; closest = d; }
+        });
+        if (!closest || minDiff > 900) continue; // 超過 15 分鐘不標
+        const x = toX(closest.lng), y = toY(closest.lat);
+        const label = `${String(h).padStart(2,'0')}:00`;
+        const hSec0 = h * 3600;
+        const t0 = Math.max(0, Math.min(1, (hSec0 - minTimeSec) / Math.max(maxTimeSec - minTimeSec, 1)));
+        const hue0 = (240 + t0 * 180) % 360;
+        const ltss = 40 + t0 * 15;
+        const c = `hsl(${hue0},100%,${ltss}%)`;
+        html += `<rect x="${x-18}" y="${y-14}" width="36" height="14" rx="3" fill="#111827" opacity="0.9" stroke="${c}" stroke-width="1"/>`;
+        html += `<text x="${x}" y="${y-3}" text-anchor="middle" font-size="9" fill="${c}">${label}</text>`;
+      }
+    } else {
+      // 訂單組模式：平台通知標籤（原有邏輯）
+      visible.filter(d => d.type === '平台通知' && d.bundleId).forEach(d => {
+        const x=toX(d.lng), y=toY(d.lat);
+        const c = getBundleColor(d.bundleId);
+        html += `<rect x="${x+5}" y="${y-10}" width="44" height="13" rx="3" fill="#111827" opacity="0.85"/>`;
+        html += `<text x="${x+8}" y="${y}" font-size="8" fill="${c}">${d.bundleId}</text>`;
+      });
+    }
+
+    svg.innerHTML = html;
+  }
+
+  // 初始全選繪製
+  renderGeoSvg('all', 'bundle');
+
+  // ── 右側圖例（含模式切換按鈕）──────────────────────
+  function buildLegend(mode) {
+    const btnStyle = (active) => `style="
+      padding:4px 10px;
+      font-size:11px;
+      font-family:'Courier New',monospace;
+      border-radius:5px;
+      cursor:pointer;
+      border:1px solid ${active ? 'var(--green)' : '#374151'};
+      background:${active ? '#1e2a3a' : 'transparent'};
+      color:${active ? 'var(--green)' : '#4b5563'};
+      transition:background 0.15s,color 0.15s,border-color 0.15s;
+    "`;
+
+    let legHTML = `
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button id="geo-mode-bundle" ${btnStyle(mode==='bundle')}>依訂單組</button>
+        <button id="geo-mode-time"   ${btnStyle(mode==='time')}>依時段</button>
+      </div>`;
+
+    if (mode === 'bundle') {
+      // ── 原有訂單組圖例 ──
+      legHTML += `<div class="leg-group-title">節點形狀</div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">●</span><span>平台通知</span></div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">■</span><span>取餐</span></div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">▲</span><span>送達</span></div>`;
+      if (bundles.length > 0) {
+        legHTML += `<div class="leg-group-title">訂單組</div>`;
+        legHTML += bundles.map(b =>
+          `<div class="leg-item"><div class="leg-line" style="background:${getBundleColor(b)}"></div><div class="leg-dot" style="background:${getBundleColor(b)};margin-left:2px"></div><span>${b}</span></div>`
+        ).join('');
+      }
+      legHTML += `<div class="leg-group-title">其他節點</div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">●</span><span>蹲點（無組別）</span></div>`;
+      legHTML += `
+        <select id="geo-filter" style="
+          margin-top:10px;
+          width:100%;
+          background:#1e2a3a;
+          color:#f0f0f0;
+          border:1px solid #374151;
+          border-radius:6px;
+          padding:5px 8px;
+          font-size:12px;
+          font-family:'Courier New',monospace;
+          cursor:pointer;
+          outline:none;
+        ">
+          <option value="all">全選（所有組別）</option>
+          ${bundles.map(b => `<option value="${b}"${currentBundle===b?' selected':''}>${b}</option>`).join('')}
+        </select>`;
+    } else {
+      // ── 時段模式圖例：色條 + 時間軸 ──
+      const minH = Math.floor(minTimeSec / 3600);
+      const maxH = Math.ceil(maxTimeSec  / 3600);
+      const hours = [];
+      for (let h = minH; h <= maxH; h++) hours.push(h);
+      const barH = Math.max(hours.length * 22, 80);
+
+      legHTML += `<div class="leg-group-title">時間軸</div>`;
+      legHTML += `<div style="display:flex;align-items:stretch;gap:8px;margin-top:4px;">`;
+      // 色條（CSS gradient，頂端=最晚=黃，底端=最早=深藍）
+      legHTML += `<div style="
+        width:16px;
+        height:${barH}px;
+        border-radius:4px;
+        background:linear-gradient(to bottom,
+          hsl(60,100%,55%),
+          hsl(30,100%,50%),
+          hsl(0,100%,45%),
+          hsl(300,100%,45%),
+          hsl(240,100%,40%)
+        );
+        flex-shrink:0;
+      "></div>`;
+      // 時間標籤（晚到早，由上而下）
+      legHTML += `<div style="display:flex;flex-direction:column;justify-content:space-between;height:${barH}px;">`;
+      [...hours].reverse().forEach(h => {
+        const t = Math.max(0, Math.min(1, (h*3600 - minTimeSec) / Math.max(maxTimeSec - minTimeSec, 1)));
+        const hue = (240 + t * 180) % 360;
+        const ltss = 40 + t * 15;
+        legHTML += `<span style="font-size:11px;color:hsl(${hue},100%,${ltss}%)">${String(h).padStart(2,'0')}:00</span>`;
+      });
+      legHTML += `</div></div>`;
+
+      legHTML += `<div class="leg-group-title" style="margin-top:10px;">節點形狀</div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">●</span><span>平台通知/蹲點</span></div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">■</span><span>取餐</span></div>`;
+      legHTML += `<div class="leg-item"><span style="color:#9ca3af;font-size:13px">▲</span><span>送達</span></div>`;
+      legHTML += `<div style="font-size:10px;color:#4b5563;margin-top:8px;">整點框 = 最近節點位置</div>`;
+    }
+
+    document.getElementById('legend-geo').innerHTML = legHTML;
+
+    // 事件綁定
+    document.getElementById('geo-mode-bundle').addEventListener('click', () => {
+      currentMode = 'bundle';
+      buildLegend('bundle');
+      renderGeoSvg(currentBundle, 'bundle');
+    });
+    document.getElementById('geo-mode-time').addEventListener('click', () => {
+      currentMode = 'time';
+      buildLegend('time');
+      renderGeoSvg('all', 'time');
+    });
+    if (mode === 'bundle') {
+      document.getElementById('geo-filter').addEventListener('change', function() {
+        currentBundle = this.value;
+        renderGeoSvg(currentBundle, 'bundle');
+      });
+    }
+  }
+
+  buildLegend('bundle');
+}
+
+// ── 圖二：時間瓶頸橫條圖 ──────────────────────────
+function drawBar(data) {
+  const segSecs = {};
+  data.forEach(d => {
+    if (!d.seg || !d.sec) return;
+    segSecs[d.seg] = (segSecs[d.seg]||0) + d.sec;
+  });
+  const rows = Object.entries(segSecs).sort((a,b)=>b[1]-a[1]);
+  const maxSec = rows[0]?.[1]||1;
+
+  const container = document.getElementById('bar-chart');
+  container.innerHTML = rows.map(([seg,sec]) => {
+    const pct = (sec/maxSec*100).toFixed(1);
+    const mm = Math.floor(sec/60), ss = Math.round(sec%60);
+    const color = SEG_COLOR[seg]||'#9ca3af';
+    return `
+      <div class="bar-row">
+        <div class="bar-label">
+          <span class="seg" style="color:${color}">${seg}</span>
+          <span class="val">${mm}分${String(ss).padStart(2,'0')}秒（${Math.round(sec)}s）</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── 圖三：單趟散佈圖（取餐→送達，依訂單組） ───────────
+const BUNDLE_COLORS = ['#60a5fa','#F5A623','#a78bfa','#3CB99A','#f472b6','#fb923c','#34d399','#f87171','#e879f9','#38bdf8'];
+function getBundleColor(bid) {
+  const m = (bid||'').match(/^第(\d+)組$/);
+  const n = m ? parseInt(m[1],10) : 0;
+  return BUNDLE_COLORS[(n-1) % BUNDLE_COLORS.length] || '#9ca3af';
+}
+
+function drawScatter(data) {
+  // 配對取餐→送達（同 bundleId，送達的 seg 為取送段或送達→送達）
+  const trips = [];
+  data.forEach((d, i) => {
+    if (d.type !== '送達') return;
+    // 往回找同組最近一筆取餐
+    let pickup = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (data[j].bundleId === d.bundleId && data[j].type === '取餐') { pickup = data[j]; break; }
+    }
+    if (!pickup) return;
+    // 取餐到送達的距離與時間：用送達的 dist / sec（代表該段）
+    if (d.dist <= 0 || d.sec <= 0) return;
+    trips.push({ bundleId: d.bundleId, dist: d.dist, sec: d.sec, fee: d.fee || 0 });
+  });
+  if (trips.length === 0) return;
+
+  const maxDist = Math.max(...trips.map(d=>d.dist));
+  const maxTime = Math.max(...trips.map(d=>d.sec));
+  const maxFee  = Math.max(...trips.map(d=>d.fee), 1);
+
+  const W=760, H=520, L=55, R=20, T=20, B=70;
+  const plotW=W-L-R, plotH=H-T-B;
+  const toX = dist => L + (dist/maxDist)*plotW;
+  const toY  = sec  => T + plotH - (sec/maxTime)*plotH;
+
+  let html = '';
+
+  // 格線 + 軸刻度
+  [0.25,0.5,0.75,1].forEach(f => {
+    const xPos = L + f*plotW, yPos = T + plotH - f*plotH;
+    const distV = Math.round(f*maxDist), secV = Math.round(f*maxTime);
+    html += `<line x1="${xPos}" y1="${T}" x2="${xPos}" y2="${T+plotH}" stroke="#1e2a3a" stroke-width="1"/>`;
+    html += `<line x1="${L}" y1="${yPos}" x2="${W-R}" y2="${yPos}" stroke="#1e2a3a" stroke-width="1"/>`;
+    const distLabel = distV>=1000 ? `${(distV/1000).toFixed(1)}k` : distV;
+    html += `<text x="${xPos}" y="${T+plotH+18}" text-anchor="middle" font-size="10" fill="#4b5563">${distLabel}</text>`;
+    html += `<text x="${L-6}" y="${yPos+3}" text-anchor="end" font-size="10" fill="#4b5563">${secV}</text>`;
+  });
+
+  // 軸標籤
+  html += `<text x="${L+plotW/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="#6b7280">距離 (m)</text>`;
+  html += `<text x="14" y="${T+plotH/2}" text-anchor="middle" font-size="11" fill="#6b7280" transform="rotate(-90,14,${T+plotH/2})">時間 (秒)</text>`;
+
+  // 資料點（依訂單組上色）
+  trips.forEach(d => {
+    const x = toX(d.dist), y = toY(d.sec);
+    const r = Math.min(3 + (d.fee/maxFee)*9, 12);
+    const color = getBundleColor(d.bundleId);
+    html += `<circle cx="${x}" cy="${y}" r="${r}" fill="${color}" fill-opacity="0.75" stroke="${color}" stroke-width="0.8"><title>${d.bundleId}｜距離${Math.round(d.dist)}m｜時間${Math.round(d.sec)}s${d.fee?'｜NT$'+d.fee:''}</title></circle>`;
+  });
+
+  document.getElementById('svg-scatter').innerHTML = html;
+
+  // 右側圖例：訂單組
+  const bundles = [...new Set(trips.map(d=>d.bundleId).filter(Boolean))];
+  const fees = [...new Set(trips.map(d=>d.fee).filter(f=>f>0))].sort((a,b)=>a-b);
+  const feeSteps = fees.length <= 5 ? fees : [fees[0], fees[Math.floor(fees.length*0.25)], fees[Math.floor(fees.length*0.5)], fees[Math.floor(fees.length*0.75)], fees[fees.length-1]];
+
+  let legHTML = `<div class="leg-group-title">訂單組</div>`;
+  legHTML += bundles.map(b =>
+    `<div class="leg-item"><div class="leg-dot" style="background:${getBundleColor(b)}"></div><span>${b}</span></div>`
+  ).join('');
+  legHTML += `<div class="leg-group-title">外送金額 NT$</div>`;
+  legHTML += feeSteps.map(f => {
+    const r = Math.min(3 + (f/maxFee)*9, 12);
+    const size = Math.round(r*2);
+    return `<div class="size-legend-row"><div class="size-bubble" style="width:${size}px;height:${size}px;min-width:${size}px"></div><span style="font-size:12px;color:var(--text-sec)">${f}</span></div>`;
+  }).join('');
+
+  document.getElementById('legend-scatter').innerHTML = legHTML;
+}
+
+// ── 時間字串轉秒數 ───────────────────────────────────
+function timeStrToSec(s) {
+  const p = String(s||'').split(':');
+  if (p.length < 2) return null;
+  const h = parseInt(p[0])||0, m = parseInt(p[1])||0, sec = parseInt(p[2])||0;
+  return h*3600 + m*60 + sec;
+}
+
+// ── 共用回歸邏輯（保留截距，Q3高效組，IQR離群）───────
+function buildEffData(groups) {
+  // groups: [{ bundleId, minutes|km, fee }]  傳入前已帶好 x 欄位
+  return groups;
+}
+function linReg(pts, xKey) {
+  if (pts.length < 2) return null;
+  const n = pts.length;
+  const sumX  = pts.reduce((s,p)=>s+p[xKey], 0);
+  const sumY  = pts.reduce((s,p)=>s+p.fee, 0);
+  const sumXY = pts.reduce((s,p)=>s+p[xKey]*p.fee, 0);
+  const sumX2 = pts.reduce((s,p)=>s+p[xKey]*p[xKey], 0);
+  const denom = n*sumX2 - sumX*sumX;
+  if (denom === 0) return null;
+  const slope = (n*sumXY - sumX*sumY) / denom;
+  const intercept = (sumY - slope*sumX) / n;
+  const avgX = sumX / n;
+  const ntdPer = Math.round((slope * avgX + intercept) / avgX);
+  return { slope, intercept, ntdPer };
+}
+function effChart(svgId, legId, groups, xKey, xLabel, unit) {
+  const svg = document.getElementById(svgId);
+  const leg = document.getElementById(legId);
+  if (!svg || groups.length < 2) { if(svg) svg.innerHTML=`<text x="380" y="240" text-anchor="middle" font-size="14" fill="#4b5563">資料不足（需至少 2 筆完整組別）</text>`; return; }
+
+  const W=760, H=480, ML=60, MR=24, MT=20, MB=50;
+  const IW=W-ML-MR, IH=H-MT-MB;
+  const maxX   = Math.max(...groups.map(d=>d[xKey]), 1) * 1.15;
+  const maxFee = Math.max(...groups.map(d=>d.fee),  10) * 1.15;
+  const toX = x   => ML + (x   / maxX)   * IW;
+  const toY = fee => MT + IH - (fee / maxFee) * IH;
+
+  // IQR 離群過濾
+  const allRatios = groups.map(d=>d.fee/d[xKey]).sort((a,b)=>a-b);
+  const iqrQ1 = allRatios[Math.floor(allRatios.length*0.25)];
+  const iqrQ3 = allRatios[Math.floor(allRatios.length*0.75)];
+  const iqr = iqrQ3 - iqrQ1;
+  const iqrLo = iqrQ1 - 1.5*iqr, iqrHi = iqrQ3 + 1.5*iqr;
+  const normal  = groups.filter(d=>{ const r=d.fee/d[xKey]; return r>=iqrLo && r<=iqrHi; });
+  const outlier = groups.filter(d=>{ const r=d.fee/d[xKey]; return r<iqrLo  || r>iqrHi;  });
+
+  // 回歸線 1：全組
+  const reg1 = linReg(normal.length>=2 ? normal : groups, xKey);
+
+  // 回歸線 2：高效組（Q3門檻）
+  const ratios = normal.map(d=>d.fee/d[xKey]).sort((a,b)=>a-b);
+  const q3Ratio = ratios[Math.floor(ratios.length*0.75)];
+  const highEff = normal.filter(d=>d.fee/d[xKey] >= q3Ratio);
+  const reg2 = linReg(highEff.length>=2 ? highEff : normal, xKey);
+
+  const regLine = (reg) => {
+    if (!reg) return null;
+    return { x1:0, y1:reg.intercept, x2:maxX, y2:reg.slope*maxX+reg.intercept };
+  };
+  const line1 = regLine(reg1), line2 = regLine(reg2);
+
+  const yTicks = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxFee));
+  const xTicks = [0.25,0.5,0.75,1].map(f=>parseFloat((f*maxX).toFixed(1)));
+
+  let html = '';
+  // 格線
+  yTicks.forEach(v => {
+    html += `<line x1="${ML}" y1="${toY(v)}" x2="${ML+IW}" y2="${toY(v)}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+  xTicks.forEach(v => {
+    html += `<line x1="${toX(v)}" y1="${MT}" x2="${toX(v)}" y2="${MT+IH}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  // Y 刻度
+  html += `<text x="${ML-4}" y="${toY(0)+3}" text-anchor="end" font-size="9" fill="#6b7280">0</text>`;
+  yTicks.forEach(v => {
+    html += `<text x="${ML-4}" y="${toY(v)+3}" text-anchor="end" font-size="9" fill="#9ca3af">${v}</text>`;
+  });
+  // X 刻度
+  html += `<text x="${ML}" y="${MT+IH+20}" text-anchor="middle" font-size="9" fill="#6b7280">0</text>`;
+  xTicks.forEach(v => {
+    html += `<text x="${toX(v)}" y="${MT+IH+20}" text-anchor="middle" font-size="9" fill="#9ca3af">${v}</text>`;
+  });
+  // 軸標籤
+  html += `<text x="${ML+IW/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="#4b5563">${xLabel}</text>`;
+  html += `<text x="14" y="${MT+IH/2}" text-anchor="middle" font-size="11" fill="#4b5563" transform="rotate(-90,14,${MT+IH/2})">Revenue (NTD)</text>`;
+
+  // 回歸線 1（粉虛線）
+  if (line1) {
+    const y1c = Math.min(Math.max(toY(line1.y1), MT), MT+IH);
+    const y2c = Math.min(Math.max(toY(line1.y2), MT), MT+IH);
+    html += `<line x1="${toX(line1.x1)}" y1="${y1c}" x2="${toX(line1.x2)}" y2="${y2c}" stroke="#f472b6" stroke-width="1.8" stroke-dasharray="6,4" opacity="0.9"/>`;
+    html += `<text x="${toX(line1.x2)-4}" y="${Math.min(Math.max(toY(line1.y2),MT+10),MT+IH)-6}" text-anchor="end" font-size="10" fill="#f472b6">全組 ${reg1.ntdPer} ${unit}</text>`;
+  }
+  // 回歸線 2（綠虛線）
+  if (line2) {
+    const y1c = Math.min(Math.max(toY(line2.y1), MT), MT+IH);
+    const y2c = Math.min(Math.max(toY(line2.y2), MT), MT+IH);
+    html += `<line x1="${toX(line2.x1)}" y1="${y1c}" x2="${toX(line2.x2)}" y2="${y2c}" stroke="#4ade80" stroke-width="1.8" stroke-dasharray="6,4" opacity="0.9"/>`;
+    html += `<text x="${toX(line2.x2)-4}" y="${Math.min(Math.max(toY(line2.y2),MT+10),MT+IH)-18}" text-anchor="end" font-size="10" fill="#4ade80">高效組 ${reg2.ntdPer} ${unit}</text>`;
+  }
+  // 正常點
+  normal.forEach(d => {
+    const cx=toX(d[xKey]), cy=toY(d.fee);
+    const isHigh = d.fee/d[xKey] >= q3Ratio;
+    const color = getBundleColor(d.bundleId);
+    html += `<circle cx="${cx}" cy="${cy}" r="10" fill="${color}" fill-opacity="0.85" stroke="${isHigh?'#4ade80':'#f472b6'}" stroke-width="${isHigh?2:1}"><title>${d.bundleId}｜${xKey==='km'?d[xKey].toFixed(2)+'km':d[xKey]+'分'}｜NT$${d.fee}</title></circle>`;
+  });
+  // 離群點（空心虛線）
+  outlier.forEach(d => {
+    const cx=toX(d[xKey]), cy=toY(d.fee);
+    const color = getBundleColor(d.bundleId);
+    html += `<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"><title>${d.bundleId}（離群）</title></circle>`;
+  });
+
+  svg.innerHTML = html;
+
+  // 圖例
+  const allBundles = [...new Set([...normal, ...outlier].map(d=>d.bundleId).filter(Boolean))];
+  leg.innerHTML = `
+    <div class="leg-group-title">回歸線</div>
+    <div class="leg-item"><div class="leg-line" style="background:#f472b6"></div><span>全組</span></div>
+    <div class="leg-item"><div class="leg-line" style="background:#4ade80"></div><span>高效組（前25%）</span></div>
+    <div class="leg-group-title">資料點</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#9ca3af;border:2px solid #4ade80"></div><span>高效組</span></div>
+    <div class="leg-item"><div class="leg-dot" style="background:transparent;border:2px dashed #9ca3af"></div><span>離群值</span></div>
+    <div class="leg-group-title">訂單組</div>
+    ${allBundles.map(b=>`<div class="leg-item"><div class="leg-dot" style="background:${getBundleColor(b)}"></div><span>${b}</span></div>`).join('')}
+  `;
+}
+
+
+// ── 圖四：三折線圖 ────────────────────────────────────
+function drawBurnRate(data) {
+  const svg = document.getElementById('svg-burn');
+  if (!svg) return;
+  // 只取有時間字串的節點，過濾合計列
+  const pts = data.filter(d => d.timeStr && d.dist_total >= 0).map(d => ({
+    timeSec: timeStrToSec(d.timeStr),
+    dist: d.dist_total,
+    rev: 0, // 累積收益，下面計算
+    ntdPerKm: 0, // 累計 NTD/km，下面計算
+    fee: d.fee,
+    timeStr: d.timeStr,
+  }));
+  if (pts.length < 2) { svg.innerHTML=`<text x="480" y="160" text-anchor="middle" font-size="14" fill="#4b5563">資料不足</text>`; return; }
+
+  // 累積收益 & 累計 NTD/km
+  let cumRev = 0;
+  pts.forEach(p => {
+    cumRev += p.fee;
+    p.rev = cumRev;
+    p.ntdPerKm = p.dist > 0 ? cumRev / (p.dist / 1000) : 0;
+  });
+
+  const minT = pts[0].timeSec, maxT = pts[pts.length-1].timeSec;
+  const maxDist    = Math.max(...pts.map(p=>p.dist), 1);
+  const maxRev     = Math.max(...pts.map(p=>p.rev),  1);
+  const maxNtdPerKm = Math.max(...pts.filter(p=>p.ntdPerKm>0).map(p=>p.ntdPerKm), 1) * 1.1;
+
+  // 擴寬右邊距：右軸1=收益(橙) / 右軸2=NTD/km(綠)
+  const W=960, H=320, ML=60, MR=110, MT=20, MB=40;
+  const IW=W-ML-MR, IH=H-MT-MB;
+  const toX       = ts  => ML + ((ts-minT) / Math.max(maxT-minT,1)) * IW;
+  const toDistY   = d   => MT + IH - (d/maxDist)*IH;
+  const toRevY    = r   => MT + IH - (r/maxRev)*IH;
+  const toNtdKmY  = v   => MT + IH - (v/maxNtdPerKm)*IH;
+
+  const distTicks    = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxDist));
+  const revTicks     = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxRev));
+  const ntdKmTicks   = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxNtdPerKm));
+
+  // X 刻度（最多 5 個）
+  const step = Math.max(1, Math.floor(pts.length/4));
+  const xIdxs = [];
+  for (let i=0; i<pts.length; i+=step) xIdxs.push(i);
+  if (xIdxs[xIdxs.length-1] !== pts.length-1) xIdxs.push(pts.length-1);
+
+  const distPts    = pts.map(p=>`${toX(p.timeSec).toFixed(1)},${toDistY(p.dist).toFixed(1)}`).join(' ');
+  const revPts     = pts.map(p=>`${toX(p.timeSec).toFixed(1)},${toRevY(p.rev).toFixed(1)}`).join(' ');
+  const ntdKmPts   = pts.filter(p=>p.ntdPerKm>0).map(p=>`${toX(p.timeSec).toFixed(1)},${toNtdKmY(p.ntdPerKm).toFixed(1)}`).join(' ');
+
+  let html = '';
+
+  // 格線（依距離刻度）
+  distTicks.forEach(v => {
+    html += `<line x1="${ML}" y1="${toDistY(v)}" x2="${ML+IW}" y2="${toDistY(v)}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML+IW}" y1="${MT}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+
+  // 左Y（距離，藍）
+  html += `<text x="${ML-4}" y="${toDistY(0)+3}" text-anchor="end" font-size="9" fill="#6b7280">0</text>`;
+  distTicks.forEach(v => {
+    const label = v>=1000 ? `${(v/1000).toFixed(1)}k` : v;
+    html += `<text x="${ML-4}" y="${toDistY(v)+3}" text-anchor="end" font-size="9" fill="#60a5fa">${label}</text>`;
+  });
+
+  // 右Y1（收益，橙）── 緊鄰圖右緣
+  const rx1 = ML+IW+4;
+  html += `<text x="${rx1}" y="${toRevY(0)+3}" text-anchor="start" font-size="9" fill="#6b7280">0</text>`;
+  revTicks.forEach(v => {
+    html += `<text x="${rx1}" y="${toRevY(v)+3}" text-anchor="start" font-size="9" fill="#F5A623">${v}</text>`;
+  });
+
+  // 右Y2（NTD/km，綠）── 第二區塊起點（850+55+4=909）
+  const rx2 = ML+IW+59;
+  html += `<text x="${rx2}" y="${toNtdKmY(0)+3}" text-anchor="start" font-size="9" fill="#6b7280">0</text>`;
+  ntdKmTicks.forEach(v => {
+    html += `<text x="${rx2}" y="${toNtdKmY(v)+3}" text-anchor="start" font-size="9" fill="#3CB99A">${v}</text>`;
+  });
+
+  // X 刻度
+  xIdxs.forEach(i => {
+    const p = pts[i];
+    html += `<text x="${toX(p.timeSec)}" y="${H-8}" text-anchor="middle" font-size="8" fill="#6b7280">${p.timeStr.slice(0,5)}</text>`;
+  });
+
+  // 軸標籤（各自置中於 55px 區塊：區塊一中心=ML+IW+27, 區塊二中心=ML+IW+82）
+  html += `<text x="14" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#60a5fa" transform="rotate(-90,14,${MT+IH/2})">距離(m)</text>`;
+  html += `<text x="${ML+IW+27}" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#F5A623" transform="rotate(90,${ML+IW+27},${MT+IH/2})">收益(NTD)</text>`;
+  html += `<text x="${ML+IW+82}" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#3CB99A" transform="rotate(90,${ML+IW+82},${MT+IH/2})">NTD/km</text>`;
+
+  // 折線：距離（藍）
+  html += `<polyline points="${distPts}" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round"/>`;
+  // 折線：收益（橙）
+  html += `<polyline points="${revPts}" fill="none" stroke="#F5A623" stroke-width="2" stroke-linejoin="round"/>`;
+  // 折線：累計 NTD/km（綠，虛線）
+  if (ntdKmPts) {
+    html += `<polyline points="${ntdKmPts}" fill="none" stroke="#3CB99A" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6,3"/>`;
+  }
+
+  // 節點點
+  pts.forEach(p => {
+    html += `<circle cx="${toX(p.timeSec)}" cy="${toDistY(p.dist)}" r="2" fill="#60a5fa"/>`;
+    html += `<rect x="${toX(p.timeSec)-2}" y="${toRevY(p.rev)-2}" width="4" height="4" fill="#F5A623"/>`;
+    if (p.ntdPerKm > 0) {
+      const cx = toX(p.timeSec), cy = toNtdKmY(p.ntdPerKm);
+      html += `<polygon points="${cx},${cy-3.5} ${cx+3},${cy+2} ${cx-3},${cy+2}" fill="#3CB99A"/>`;
+    }
+  });
+
+  svg.innerHTML = html;
+}
+
+// ── 圖五：Distance Efficiency ─────────────────────────
+function drawDistEff(data) {
+  // 以 bundleId 分組，從平台通知起累加距離
+  const bundles = {};
+  data.forEach(d => {
+    if (!d.bundleId) return;
+    if (!bundles[d.bundleId]) bundles[d.bundleId] = { notifySec:null, lastDeliverySec:null, totalFee:0, totalDistM:0, counting:false };
+    const b = bundles[d.bundleId];
+    if (d.type === '平台通知' && b.notifySec === null) { b.notifySec = timeStrToSec(d.timeStr); b.counting = true; }
+    if (b.counting) b.totalDistM += (d.dist || 0);
+    if (d.type === '送達') { b.lastDeliverySec = timeStrToSec(d.timeStr); b.totalFee += (d.fee||0); }
+  });
+  const groups = Object.entries(bundles)
+    .filter(([,b]) => b.notifySec!==null && b.lastDeliverySec!==null && b.totalFee>0 && b.totalDistM>0)
+    .map(([bid,b]) => ({ bundleId:bid, km: Math.max(0.01, b.totalDistM/1000), fee: b.totalFee }));
+
+  effChart('svg-dist-eff', 'legend-dist-eff', groups, 'km', 'Trip Distance（公里）', 'NTD/KM');
+}
+
+// ── 圖六：Time Efficiency ─────────────────────────────
+function drawTimeEff(data) {
+  const bundles = {};
+  data.forEach(d => {
+    if (!d.bundleId) return;
+    if (!bundles[d.bundleId]) bundles[d.bundleId] = { notifySec:null, lastDeliverySec:null, totalFee:0 };
+    const b = bundles[d.bundleId];
+    if (d.type === '平台通知' && b.notifySec === null) b.notifySec = timeStrToSec(d.timeStr);
+    if (d.type === '送達') { b.lastDeliverySec = timeStrToSec(d.timeStr); b.totalFee += (d.fee||0); }
+  });
+  const groups = Object.entries(bundles)
+    .filter(([,b]) => b.notifySec!==null && b.lastDeliverySec!==null && b.totalFee>0)
+    .map(([bid,b]) => {
+      const minutes = Math.max(1, Math.round((b.lastDeliverySec - b.notifySec) / 60));
+      return { bundleId:bid, minutes, fee: b.totalFee };
+    });
+
+  // 時間效率：ntdPer 需 ×60 換算為 NTD/Hr
+  // 在 linReg 內已用平均點換算，這裡 unit 直接寫 NTD/Hr
+  // 但 linReg 計算的 ntdPer = (slope*avgX+intercept)/avgX（單位 NTD/分），要 ×60
+  // → 傳入前把 fee 換算不改動，而是在 effChart 後修正標籤
+  // 做法：建一個包裝，分鐘版 ntdPer 傳出後 ×60
+  const groupsForChart = groups.map(g=>({...g})); // shallow copy
+  // 用 effChart 的 unit 參數顯示 NTD/Hr，但 ntdPer 是 NTD/分 × 60
+  // → 自訂 effChartTime
+  effChartTime('svg-time-eff', 'legend-time-eff', groupsForChart);
+}
+
+function effChartTime(svgId, legId, groups) {
+  const svg = document.getElementById(svgId);
+  const leg = document.getElementById(legId);
+  if (!svg || groups.length < 2) { if(svg) svg.innerHTML=`<text x="380" y="240" text-anchor="middle" font-size="14" fill="#4b5563">資料不足（需至少 2 筆完整組別）</text>`; return; }
+
+  const W=760, H=480, ML=60, MR=24, MT=20, MB=50;
+  const IW=W-ML-MR, IH=H-MT-MB;
+  const maxX   = Math.max(...groups.map(d=>d.minutes), 1) * 1.15;
+  const maxFee = Math.max(...groups.map(d=>d.fee),    10) * 1.15;
+  const toX = x   => ML + (x   / maxX)   * IW;
+  const toY = fee => MT + IH - (fee / maxFee) * IH;
+
+  // IQR
+  const allRatios = groups.map(d=>d.fee/d.minutes).sort((a,b)=>a-b);
+  const iqrQ1 = allRatios[Math.floor(allRatios.length*0.25)];
+  const iqrQ3 = allRatios[Math.floor(allRatios.length*0.75)];
+  const iqr = iqrQ3 - iqrQ1;
+  const iqrLo = iqrQ1 - 1.5*iqr, iqrHi = iqrQ3 + 1.5*iqr;
+  const normal  = groups.filter(d=>{ const r=d.fee/d.minutes; return r>=iqrLo && r<=iqrHi; });
+  const outlier = groups.filter(d=>{ const r=d.fee/d.minutes; return r<iqrLo  || r>iqrHi;  });
+
+  const reg1 = linReg(normal.length>=2 ? normal : groups, 'minutes');
+  const ratios = normal.map(d=>d.fee/d.minutes).sort((a,b)=>a-b);
+  const q3Ratio = ratios[Math.floor(ratios.length*0.75)];
+  const highEff = normal.filter(d=>d.fee/d.minutes >= q3Ratio);
+  const reg2 = linReg(highEff.length>=2 ? highEff : normal, 'minutes');
+
+  const regLine = (reg) => reg ? { x1:0, y1:reg.intercept, x2:maxX, y2:reg.slope*maxX+reg.intercept } : null;
+  const line1 = regLine(reg1), line2 = regLine(reg2);
+
+  const yTicks = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxFee));
+  const xTicks = [0.25,0.5,0.75,1].map(f=>Math.round(f*maxX));
+
+  let html = '';
+  yTicks.forEach(v => html += `<line x1="${ML}" y1="${toY(v)}" x2="${ML+IW}" y2="${toY(v)}" stroke="#1e2a3a" stroke-width="1"/>`);
+  xTicks.forEach(v => html += `<line x1="${toX(v)}" y1="${MT}" x2="${toX(v)}" y2="${MT+IH}" stroke="#1e2a3a" stroke-width="1"/>`);
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<text x="${ML-4}" y="${toY(0)+3}" text-anchor="end" font-size="9" fill="#6b7280">0</text>`;
+  yTicks.forEach(v => html += `<text x="${ML-4}" y="${toY(v)+3}" text-anchor="end" font-size="9" fill="#9ca3af">${v}</text>`);
+  html += `<text x="${ML}" y="${MT+IH+20}" text-anchor="middle" font-size="9" fill="#6b7280">0</text>`;
+  xTicks.forEach(v => html += `<text x="${toX(v)}" y="${MT+IH+20}" text-anchor="middle" font-size="9" fill="#9ca3af">${v}</text>`);
+  html += `<text x="${ML+IW/2}" y="${H-6}" text-anchor="middle" font-size="11" fill="#4b5563">Trip Time（分鐘）</text>`;
+  html += `<text x="14" y="${MT+IH/2}" text-anchor="middle" font-size="11" fill="#4b5563" transform="rotate(-90,14,${MT+IH/2})">Revenue (NTD)</text>`;
+
+  if (line1) {
+    const y1c=Math.min(Math.max(toY(line1.y1),MT),MT+IH), y2c=Math.min(Math.max(toY(line1.y2),MT),MT+IH);
+    html += `<line x1="${toX(line1.x1)}" y1="${y1c}" x2="${toX(line1.x2)}" y2="${y2c}" stroke="#f472b6" stroke-width="1.8" stroke-dasharray="6,4" opacity="0.9"/>`;
+    html += `<text x="${toX(line1.x2)-4}" y="${Math.min(Math.max(toY(line1.y2),MT+10),MT+IH)-6}" text-anchor="end" font-size="10" fill="#f472b6">全組 ${reg1.ntdPer*60} NTD/Hr</text>`;
+  }
+  if (line2) {
+    const y1c=Math.min(Math.max(toY(line2.y1),MT),MT+IH), y2c=Math.min(Math.max(toY(line2.y2),MT),MT+IH);
+    html += `<line x1="${toX(line2.x1)}" y1="${y1c}" x2="${toX(line2.x2)}" y2="${y2c}" stroke="#4ade80" stroke-width="1.8" stroke-dasharray="6,4" opacity="0.9"/>`;
+    html += `<text x="${toX(line2.x2)-4}" y="${Math.min(Math.max(toY(line2.y2),MT+10),MT+IH)-18}" text-anchor="end" font-size="10" fill="#4ade80">高效組 ${reg2.ntdPer*60} NTD/Hr</text>`;
+  }
+  normal.forEach(d => {
+    const cx=toX(d.minutes), cy=toY(d.fee);
+    const isHigh = d.fee/d.minutes >= q3Ratio;
+    const color = getBundleColor(d.bundleId);
+    html += `<circle cx="${cx}" cy="${cy}" r="10" fill="${color}" fill-opacity="0.85" stroke="${isHigh?'#4ade80':'#f472b6'}" stroke-width="${isHigh?2:1}"><title>${d.bundleId}｜${d.minutes}分｜NT$${d.fee}</title></circle>`;
+  });
+  outlier.forEach(d => {
+    const cx=toX(d.minutes), cy=toY(d.fee);
+    const color = getBundleColor(d.bundleId);
+    html += `<circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="4,3" opacity="0.6"/>`;
+  });
+
+  svg.innerHTML = html;
+  const allBundlesT = [...new Set([...normal, ...outlier].map(d=>d.bundleId).filter(Boolean))];
+  leg.innerHTML = `
+    <div class="leg-group-title">回歸線</div>
+    <div class="leg-item"><div class="leg-line" style="background:#f472b6"></div><span>全組</span></div>
+    <div class="leg-item"><div class="leg-line" style="background:#4ade80"></div><span>高效組（前25%）</span></div>
+    <div class="leg-group-title">資料點</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#9ca3af;border:2px solid #4ade80"></div><span>高效組</span></div>
+    <div class="leg-item"><div class="leg-dot" style="background:transparent;border:2px dashed #9ca3af"></div><span>離群值</span></div>
+    <div class="leg-group-title">訂單組</div>
+    ${allBundlesT.map(b=>`<div class="leg-item"><div class="leg-dot" style="background:${getBundleColor(b)}"></div><span>${b}</span></div>`).join('')}
+  `;
+}
+
+
+// ── 圖七：工作時段分佈 ────────────────────────────
+function drawTimeline(data) {
+  const svg = document.getElementById('svg-timeline');
+  const leg = document.getElementById('legend-timeline');
+  if (!svg) return;
+
+  // 只納入有明確語意、有時間、有秒數的路段
+  // 取餐段：平台通知→取餐的移動段
+  // 等單段：蹲點段轉換而來，時間來自下一筆平台通知的等單秒數
+  // 接單段不納入：距上段時間即等單時間，已由蹲點段邏輯覆蓋，避免重疊
+  const INCLUDE = new Set(['等單段','取餐段','取送段','夾取段','插單段','中斷段']);
+
+  // 建立每段的 [startSec, endSec, seg] 區間
+  const segs = [];
+  data.forEach((d, i) => {
+    // ── 蹲點段 → 轉為「等單段」，時間取下一筆平台通知的等單秒數 ──
+    if (d.seg === '蹲點段' || d.seg === '起點') {
+      // 往後找第一筆平台通知，取其 等單秒數
+      for (let j = i + 1; j < data.length; j++) {
+        if (data[j].type === '平台通知') {
+          const waitSec = data[j].waitSec; // 等單秒數欄位
+          if (!waitSec || waitSec <= 0) break;
+          const endSec = timeStrToSec(data[j].timeStr);
+          if (endSec === null) break;
+          const startSec = endSec - waitSec;
+          segs.push({ startSec, endSec, seg: '等單段' });
+          break;
+        }
+      }
+      return;
+    }
+
+    if (!INCLUDE.has(d.seg)) return;
+    if (!d.timeStr || !d.sec || d.sec <= 0) return;
+    const endSec   = timeStrToSec(d.timeStr);
+    if (endSec === null) return;
+    const startSec = endSec - d.sec;
+    segs.push({ startSec, endSec, seg: d.seg });
+  });
+
+  if (segs.length === 0) {
+    svg.innerHTML = `<text x="450" y="200" text-anchor="middle" font-size="14" fill="#4b5563">資料不足</text>`;
+    return;
+  }
+
+  // 找出資料涵蓋的小時範圍
+  const minHour = Math.floor(Math.min(...segs.map(s=>s.startSec)) / 3600);
+  const maxHour = Math.ceil( Math.max(...segs.map(s=>s.endSec))   / 3600);
+  const hours   = [];
+  for (let h = minHour; h < maxHour; h++) hours.push(h);
+
+  const W=900, H=400;
+  const ML=48, MR=16, MT=28, MB=36;
+  const IW = W - ML - MR;
+  const IH = H - MT - MB;
+  const colW  = IW / hours.length;        // 每個小時欄寬
+  const toY   = min => MT + IH - (min / 60) * IH;  // 分鐘 → SVG Y
+
+  let html = '';
+
+  // 格線（每 10 分鐘一條）
+  [10,20,30,40,50,60].forEach(m => {
+    const y = toY(m);
+    html += `<line x1="${ML}" y1="${y}" x2="${ML+IW}" y2="${y}" stroke="#1e2a3a" stroke-width="1"/>`;
+    html += `<text x="${ML-4}" y="${y+3}" text-anchor="end" font-size="9" fill="#4b5563">${m}</text>`;
+  });
+  // Y=0 標記
+  html += `<text x="${ML-4}" y="${toY(0)+3}" text-anchor="end" font-size="9" fill="#4b5563">0</text>`;
+
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+
+  // 每個小時欄：背景 + X 軸標籤 + 欄分隔線
+  hours.forEach((h, i) => {
+    const x = ML + i * colW;
+    html += `<line x1="${x}" y1="${MT}" x2="${x}" y2="${MT+IH}" stroke="#1e2a3a" stroke-width="1"/>`;
+    html += `<text x="${x + colW/2}" y="${MT+IH+18}" text-anchor="middle" font-size="10" fill="#6b7280">${h}:00</text>`;
+  });
+
+  // 軸標籤
+  html += `<text x="${ML-30}" y="${MT + IH/2}" text-anchor="middle" font-size="10" fill="#4b5563" transform="rotate(-90,${ML-30},${MT+IH/2})">分鐘</text>`;
+
+  // 繪製各路段色塊
+  segs.forEach(({ startSec, endSec, seg }) => {
+    const color = SEG_COLOR[seg] || '#9ca3af';
+    // 一段可能跨越多個小時欄，分別裁切繪製
+    for (let hi = 0; hi < hours.length; hi++) {
+      const h       = hours[hi];
+      const hStart  = h * 3600;       // 這個小時欄的起點（秒）
+      const hEnd    = hStart + 3600;  // 這個小時欄的終點（秒）
+      const clipS   = Math.max(startSec, hStart);
+      const clipE   = Math.min(endSec,   hEnd);
+      if (clipE <= clipS) continue;
+
+      const minS  = (clipS - hStart) / 60;  // 在這個欄內的開始分鐘
+      const minE  = (clipE - hStart) / 60;  // 在這個欄內的結束分鐘
+      const x     = ML + hi * colW + 1;
+      const rectW = colW - 2;
+      const y1    = toY(minE);   // SVG Y 軸上方（分鐘大 = Y 小）
+      const y2    = toY(minS);
+      const rh    = Math.max(y2 - y1, 1);
+      html += `<rect x="${x}" y="${y1}" width="${rectW}" height="${rh}" fill="${color}" fill-opacity="0.82"><title>${seg}｜${Math.round(minS)}–${Math.round(minE)}分</title></rect>`;
+    }
+  });
+
+  svg.innerHTML = html;
+
+  // 右側圖例：出現在資料中的路段語意
+  const appeared = [...new Set(segs.map(s=>s.seg))];
+  const order = ['等單段','取餐段','取送段','夾取段','插單段','中斷段'];
+  const sorted = order.filter(s => appeared.includes(s));
+  leg.innerHTML = `
+    <div class="leg-group-title">路段語意</div>
+    ${sorted.map(s=>`<div class="leg-item"><div class="leg-dot" style="background:${SEG_COLOR[s]}"></div><span>${s}</span></div>`).join('')}
+  `;
+}
+
+
+// ── 圖四點七：NTD/min 時間效率折線圖 ──────────────────
+function drawNtdMin(data) {
+  const svg = document.getElementById('svg-ntdmin');
+  if (!svg) return;
+
+  // ── Step1：建立時間軸基礎點（所有有時間的節點）──
+  const allPts = data
+    .filter(d => d.timeStr && d.sec != null)
+    .map(d => ({ timeSec: timeStrToSec(d.timeStr), fee: d.fee || 0, type: d.type, timeStr: d.timeStr }))
+    .filter(d => d.timeSec !== null)
+    .sort((a, b) => a.timeSec - b.timeSec);
+
+  if (allPts.length < 2) {
+    svg.innerHTML = `<text x="450" y="160" text-anchor="middle" font-size="14" fill="#4b5563">資料不足</text>`;
+    return;
+  }
+
+  // ── Step2：累計 NTD/min（每個節點）──
+  const startSec = allPts[0].timeSec;
+  let cumRev = 0;
+  const cumPts = allPts.map(p => {
+    cumRev += p.fee;
+    const elapsedMin = Math.max((p.timeSec - startSec) / 60, 0.01);
+    return { timeSec: p.timeSec, cumNtdMin: cumRev / elapsedMin, timeStr: p.timeStr };
+  });
+
+  // ── Step3：瞬時 NTD/min（每筆送達，從本組平台通知到送達的金額÷時間）──
+  const instPts = [];
+  data.filter(d => d.type === '送達' && d.timeStr && d.fee > 0).forEach(d => {
+    const deliverySec = timeStrToSec(d.timeStr);
+    if (deliverySec === null) return;
+    // 往回找同組最近一筆平台通知
+    let notifySec = null;
+    for (let i = data.indexOf(d) - 1; i >= 0; i--) {
+      if (data[i].bundleId === d.bundleId && data[i].type === '平台通知') {
+        notifySec = timeStrToSec(data[i].timeStr);
+        break;
+      }
+    }
+    if (notifySec === null || deliverySec <= notifySec) return;
+    const mins = (deliverySec - notifySec) / 60;
+    if (mins <= 0) return;
+    instPts.push({ timeSec: deliverySec, instNtdMin: d.fee / mins, fee: d.fee, timeStr: d.timeStr, bundleId: d.bundleId });
+  });
+
+  // ── Step4：軸範圍 ──
+  const minT = allPts[0].timeSec;
+  const maxT = allPts[allPts.length - 1].timeSec;
+  const maxCum  = Math.max(...cumPts.map(p => p.cumNtdMin), 1) * 1.15;
+  const maxInst = Math.max(...instPts.map(p => p.instNtdMin), 1) * 1.15;
+
+  const W=900, H=320, ML=60, MR=70, MT=20, MB=40;
+  const IW=W-ML-MR, IH=H-MT-MB;
+  const toX       = ts => ML + ((ts - minT) / Math.max(maxT - minT, 1)) * IW;
+  const toCumY    = v  => MT + IH - (v / maxCum)  * IH;
+  const toInstY   = v  => MT + IH - (v / maxInst) * IH;
+
+  const cumTicks  = [0.25,0.5,0.75,1].map(f => parseFloat((f * maxCum).toFixed(1)));
+  const instTicks = [0.25,0.5,0.75,1].map(f => parseFloat((f * maxInst).toFixed(1)));
+
+  // X 刻度（最多 5 個）
+  const step = Math.max(1, Math.floor(allPts.length / 4));
+  const xIdxs = [];
+  for (let i = 0; i < allPts.length; i += step) xIdxs.push(i);
+  if (xIdxs[xIdxs.length-1] !== allPts.length-1) xIdxs.push(allPts.length-1);
+
+  let html = '';
+
+  // 格線（依累計刻度）
+  cumTicks.forEach(v => {
+    html += `<line x1="${ML}" y1="${toCumY(v)}" x2="${ML+IW}" y2="${toCumY(v)}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML+IW}" y1="${MT}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+
+  // 左Y（累計 NTD/min，綠）
+  html += `<text x="${ML-4}" y="${toCumY(0)+3}" text-anchor="end" font-size="9" fill="#6b7280">0</text>`;
+  cumTicks.forEach(v => {
+    html += `<text x="${ML-4}" y="${toCumY(v)+3}" text-anchor="end" font-size="9" fill="#3CB99A">${v}</text>`;
+  });
+
+  // 右Y（瞬時 NTD/min，橙）
+  html += `<text x="${ML+IW+4}" y="${toInstY(0)+3}" text-anchor="start" font-size="9" fill="#6b7280">0</text>`;
+  instTicks.forEach(v => {
+    html += `<text x="${ML+IW+4}" y="${toInstY(v)+3}" text-anchor="start" font-size="9" fill="#F5A623">${v}</text>`;
+  });
+
+  // X 刻度
+  xIdxs.forEach(i => {
+    const p = allPts[i];
+    html += `<text x="${toX(p.timeSec)}" y="${H-8}" text-anchor="middle" font-size="8" fill="#6b7280">${p.timeStr.slice(0,5)}</text>`;
+  });
+
+  // 軸標籤
+  html += `<text x="14" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#3CB99A" transform="rotate(-90,14,${MT+IH/2})">累計 NTD/min</text>`;
+  html += `<text x="${W-8}" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#F5A623" transform="rotate(90,${W-8},${MT+IH/2})">瞬時 NTD/min</text>`;
+
+  // 折線：累計 NTD/min（綠實線）
+  const cumLine = cumPts.map(p => `${toX(p.timeSec).toFixed(1)},${toCumY(p.cumNtdMin).toFixed(1)}`).join(' ');
+  html += `<polyline points="${cumLine}" fill="none" stroke="#3CB99A" stroke-width="2" stroke-linejoin="round"/>`;
+
+  // 累計線節點（小圓）
+  cumPts.forEach(p => {
+    html += `<circle cx="${toX(p.timeSec)}" cy="${toCumY(p.cumNtdMin)}" r="2" fill="#3CB99A"/>`;
+  });
+
+  // 平均 NTD/min 水平線（全程總收入 ÷ 總分鐘）
+  const avgNtdMin = cumPts[cumPts.length - 1].cumNtdMin;
+  const avgY = toCumY(avgNtdMin);
+  html += `<line x1="${ML}" y1="${avgY}" x2="${ML+IW}" y2="${avgY}" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.55"/>`;
+  html += `<text x="${ML+IW-4}" y="${avgY-5}" text-anchor="end" font-size="9" fill="#ffffff" opacity="0.7">avg ${avgNtdMin.toFixed(1)}</text>`;
+
+  // 瞬時 NTD/min 菱形（每筆送達）
+  instPts.forEach(p => {
+    const cx = toX(p.timeSec);
+    const cy = toInstY(p.instNtdMin);
+    const color = getBundleColor(p.bundleId);
+    // 垂直輔助線（從X軸到菱形底端，淡色）
+    html += `<line x1="${cx}" y1="${MT+IH}" x2="${cx}" y2="${cy+5}" stroke="${color}" stroke-width="1" stroke-opacity="0.25"/>`;
+    // 菱形（顏色對應組別）
+    html += `<polygon points="${cx},${cy-5} ${cx+4},${cy} ${cx},${cy+5} ${cx-4},${cy}"
+      fill="${color}" fill-opacity="0.9" stroke="${color}" stroke-width="0.5">
+      <title>${p.bundleId}｜NT$${p.fee}｜${p.instNtdMin.toFixed(1)} NTD/min｜${p.timeStr.slice(0,5)}</title>
+    </polygon>`;
+    // 數值標籤（>平均值才標，避免太擠）
+    const avgInst = instPts.reduce((s,q)=>s+q.instNtdMin,0)/instPts.length;
+    if (p.instNtdMin >= avgInst) {
+      html += `<text x="${cx}" y="${cy-8}" text-anchor="middle" font-size="8" fill="${color}">${p.instNtdMin.toFixed(1)}</text>`;
+    }
+  });
+
+  svg.innerHTML = html;
+}
+
+
+// ── 圖四點五：空車率雙軸折線圖 ──────────────────────
+function drawEmptyRate(data) {
+  const svg = document.getElementById('svg-empty-rate');
+  if (!svg) return;
+
+  // 路段分類
+  const LOADED   = new Set(['取送段']);           // 有貨距離
+  const EMPTY    = new Set(['接單段','夾取段']);   // 空車距離
+
+  // 以小時為單位彙整距離
+  const hourMap = {};
+  data.forEach(d => {
+    if (!d.timeStr || d.dist == null) return;
+    const endSec = timeStrToSec(d.timeStr);
+    if (endSec === null) return;
+    const h = Math.floor(endSec / 3600);
+    if (!hourMap[h]) hourMap[h] = { loaded: 0, empty: 0 };
+    if (LOADED.has(d.seg)) hourMap[h].loaded += d.dist;
+    if (EMPTY.has(d.seg))  hourMap[h].empty  += d.dist;
+  });
+
+  const hours = Object.keys(hourMap).map(Number).sort((a,b)=>a-b);
+  if (hours.length === 0) {
+    svg.innerHTML = `<text x="450" y="160" text-anchor="middle" font-size="14" fill="#4b5563">資料不足</text>`;
+    return;
+  }
+
+  const pts = hours.map(h => {
+    const { loaded, empty } = hourMap[h];
+    const total = loaded + empty;
+    const loadedKm = loaded / 1000;
+    const emptyKm  = empty  / 1000;
+    const rate     = total > 0 ? (empty / total) * 100 : 0;
+    return { h, loadedKm, emptyKm, rate };
+  });
+
+  const W=900, H=320, ML=60, MR=60, MT=24, MB=40;
+  const IW=W-ML-MR, IH=H-MT-MB;
+
+  const maxKm   = Math.max(...pts.map(p=>p.loadedKm+p.emptyKm), 0.1) * 1.15;
+  const toX     = i  => ML + (i / Math.max(pts.length-1,1)) * IW;
+  const toKmY   = km => MT + IH - (km  / maxKm) * IH;
+  const toRateY = r  => MT + IH - (r   / 100)   * IH;
+
+  const kmTicks   = [0.25,0.5,0.75,1].map(f => parseFloat((f*maxKm).toFixed(2)));
+  const rateTicks = [25,50,75,100];
+
+  let html = '';
+
+  // 格線（依 km 刻度）
+  kmTicks.forEach(v => {
+    html += `<line x1="${ML}" y1="${toKmY(v)}" x2="${ML+IW}" y2="${toKmY(v)}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT+IH}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML+IW}" y1="${MT}" x2="${ML+IW}" y2="${MT+IH}" stroke="#374151" stroke-width="1"/>`;
+
+  // 左 Y 刻度（km）
+  html += `<text x="${ML-4}" y="${toKmY(0)+3}" text-anchor="end" font-size="9" fill="#6b7280">0</text>`;
+  kmTicks.forEach(v => {
+    html += `<text x="${ML-4}" y="${toKmY(v)+3}" text-anchor="end" font-size="9" fill="#9ca3af">${v}</text>`;
+  });
+
+  // 右 Y 刻度（%）
+  html += `<text x="${ML+IW+4}" y="${toRateY(0)+3}" text-anchor="start" font-size="9" fill="#6b7280">0%</text>`;
+  rateTicks.forEach(v => {
+    html += `<text x="${ML+IW+4}" y="${toRateY(v)+3}" text-anchor="start" font-size="9" fill="#F5A623">${v}%</text>`;
+  });
+
+  // X 刻度（小時）
+  pts.forEach((p,i) => {
+    const x = toX(i);
+    html += `<text x="${x}" y="${H-8}" text-anchor="middle" font-size="9" fill="#6b7280">${p.h}:00</text>`;
+    html += `<line x1="${x}" y1="${MT}" x2="${x}" y2="${MT+IH}" stroke="#1e2a3a" stroke-width="1"/>`;
+  });
+
+  // 軸標籤
+  html += `<text x="14" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#9ca3af" transform="rotate(-90,14,${MT+IH/2})">距離(km)</text>`;
+  html += `<text x="${W-10}" y="${MT+IH/2}" text-anchor="middle" font-size="10" fill="#F5A623" transform="rotate(90,${W-10},${MT+IH/2})">空車率(%)</text>`;
+
+  // 堆疊區域：空車（灰）疊在有貨（綠）上方
+  // 有貨距離區域（填色）
+  const loadedArea = pts.map((p,i) => `${toX(i)},${toKmY(p.loadedKm)}`).join(' ');
+  const baseLineR  = pts.map((p,i) => `${toX(i)},${toKmY(0)}`).reverse().join(' ');
+  html += `<polygon points="${loadedArea} ${baseLineR}" fill="#3CB99A" fill-opacity="0.25"/>`;
+
+  // 空車距離區域（疊在有貨上方）
+  const emptyTop  = pts.map((p,i) => `${toX(i)},${toKmY(p.loadedKm+p.emptyKm)}`).join(' ');
+  const loadedBot = pts.map((p,i) => `${toX(i)},${toKmY(p.loadedKm)}`).reverse().join(' ');
+  html += `<polygon points="${emptyTop} ${loadedBot}" fill="#9ca3af" fill-opacity="0.25"/>`;
+
+  // 折線：有貨距離（綠）
+  const loadedLine = pts.map((p,i)=>`${toX(i)},${toKmY(p.loadedKm)}`).join(' ');
+  html += `<polyline points="${loadedLine}" fill="none" stroke="#3CB99A" stroke-width="2" stroke-linejoin="round"/>`;
+
+  // 折線：空車距離（灰，總距離頂端）
+  const emptyLine = pts.map((p,i)=>`${toX(i)},${toKmY(p.loadedKm+p.emptyKm)}`).join(' ');
+  html += `<polyline points="${emptyLine}" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linejoin="round"/>`;
+
+  // 折線：空車率（橙，右軸）
+  const rateLine = pts.map((p,i)=>`${toX(i)},${toRateY(p.rate)}`).join(' ');
+  html += `<polyline points="${rateLine}" fill="none" stroke="#F5A623" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="6,3"/>`;
+
+  // 節點點
+  pts.forEach((p,i) => {
+    const x = toX(i);
+    html += `<circle cx="${x}" cy="${toKmY(p.loadedKm)}" r="3" fill="#3CB99A"/>`;
+    html += `<circle cx="${x}" cy="${toKmY(p.loadedKm+p.emptyKm)}" r="3" fill="#9ca3af"/>`;
+    html += `<rect x="${x-3}" y="${toRateY(p.rate)-3}" width="6" height="6" fill="#F5A623"/>`; 
+    // 空車率數值標籤
+    const labelY = toRateY(p.rate) - 8;
+    html += `<text x="${x}" y="${labelY}" text-anchor="middle" font-size="9" fill="#F5A623">${Math.round(p.rate)}%</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+
+// ── 圖八：每組工時結構堆疊圖 ──────────────────────
+function drawBundleStack(data) {
+  const svg = document.getElementById('svg-bundle-stack');
+  const leg = document.getElementById('legend-bundle-stack');
+  if (!svg) return;
+
+  // 路段分類
+  // 有效工時：取送段、夾取段、取餐段（含接單後前往取餐的移動）
+  // 空車工時：接單段、插單段（任務外無貨物的無效移動）
+  // 等單段：用來計算組間等待（從上一組送達到本組平台通知），不算進組內
+  const SEG_EFFECTIVE = new Set(['取送段','夾取段','取餐段']);
+  const SEG_EMPTY     = new Set(['接單段','插單段']);
+
+  // ── Step1：建立各組基本資訊（依平台通知時間排序）──────
+  const bundleMap = {};
+  data.forEach(d => {
+    if (!d.bundleId) return;
+    if (!bundleMap[d.bundleId]) bundleMap[d.bundleId] = {
+      notifySec: null, lastDeliverySec: null,
+      effectiveSec: 0, emptySec: 0,
+    };
+    const b = bundleMap[d.bundleId];
+    if (d.type === '平台通知' && b.notifySec === null)
+      b.notifySec = timeStrToSec(d.timeStr);
+    if (d.type === '送達' && d.timeStr)
+      b.lastDeliverySec = timeStrToSec(d.timeStr);
+    if (d.sec > 0 && d.seg) {
+      if (SEG_EFFECTIVE.has(d.seg))  b.effectiveSec += d.sec;
+      else if (SEG_EMPTY.has(d.seg)) b.emptySec     += d.sec;
+      // 其他語意（蹲點段、起點等）及等單段皆不計入
+    }
+  });
+
+  // 過濾有效組別，依平台通知時間排序
+  const groups = Object.entries(bundleMap)
+    .filter(([,b]) => b.notifySec !== null && b.lastDeliverySec !== null)
+    .map(([bid, b]) => ({ bundleId: bid, ...b }))
+    .sort((a, b) => a.notifySec - b.notifySec);
+
+  if (groups.length === 0) {
+    svg.innerHTML = `<text x="380" y="200" text-anchor="middle" font-size="14" fill="#4b5563">資料不足</text>`;
+    return;
+  }
+
+  // ── Step2：計算組間等待（上一組最後送達 → 本組平台通知）──
+  groups.forEach((g, i) => {
+    if (i === 0) { g.waitSec = 0; return; }
+    const prev = groups[i - 1];
+    const gap  = g.notifySec - prev.lastDeliverySec;
+    g.waitSec  = Math.max(0, gap);
+  });
+
+  // ── Step3：各組總分鐘（含組間等待）──
+  const toMin = s => Math.round(s / 60);
+  groups.forEach(g => {
+    g.waitMin     = toMin(g.waitSec);
+    g.effectiveMin= toMin(g.effectiveSec);
+    g.emptyMin    = toMin(g.emptySec);
+    g.totalMin    = g.waitMin + g.effectiveMin + g.emptyMin;
+  });
+
+  const maxTotal = Math.max(...groups.map(g => g.totalMin), 1);
+
+  // ── Step4：繪圖 ──────────────────────────────────
+  const W=760, H=400, ML=64, MR=16, MT=20, MB=28;
+  const IW = W - ML - MR;
+  const rowH   = Math.min(32, Math.floor((H - MT - MB) / groups.length));
+  const barH   = Math.max(8, rowH - 6);
+  const totalH = rowH * groups.length + MT + MB;
+
+  // 動態調整 viewBox 高度
+  svg.setAttribute('viewBox', `0 0 ${W} ${totalH}`);
+
+  const toX = min => (min / maxTotal) * IW;
+
+  // X 刻度
+  const xTicks = [0.25,0.5,0.75,1].map(f => Math.round(f * maxTotal));
+
+  let html = '';
+
+  // 格線
+  xTicks.forEach(v => {
+    const x = ML + toX(v);
+    html += `<line x1="${x}" y1="${MT}" x2="${x}" y2="${MT + rowH*groups.length}" stroke="#1e2a3a" stroke-width="1"/>`;
+    html += `<text x="${x}" y="${MT + rowH*groups.length + 16}" text-anchor="middle" font-size="9" fill="#4b5563">${v}分</text>`;
+  });
+  // X=0
+  html += `<text x="${ML}" y="${MT + rowH*groups.length + 16}" text-anchor="middle" font-size="9" fill="#4b5563">0</text>`;
+
+  // 軸框
+  html += `<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT + rowH*groups.length}" stroke="#374151" stroke-width="1"/>`;
+  html += `<line x1="${ML}" y1="${MT + rowH*groups.length}" x2="${ML+IW}" y2="${MT + rowH*groups.length}" stroke="#374151" stroke-width="1"/>`;
+
+  // 每組橫條
+  groups.forEach((g, i) => {
+    const y    = MT + i * rowH + Math.floor((rowH - barH) / 2);
+    let   xCur = ML;
+
+    // 組間等待（灰）
+    if (g.waitMin > 0) {
+      const w = toX(g.waitMin);
+      html += `<rect x="${xCur}" y="${y}" width="${w}" height="${barH}" fill="#4b5563" fill-opacity="0.85"><title>${g.bundleId}｜組間等待 ${g.waitMin}分</title></rect>`;
+      xCur += w;
+    }
+    // 空車工時（藍）
+    if (g.emptyMin > 0) {
+      const w = toX(g.emptyMin);
+      html += `<rect x="${xCur}" y="${y}" width="${w}" height="${barH}" fill="#60a5fa" fill-opacity="0.85"><title>${g.bundleId}｜空車工時 ${g.emptyMin}分</title></rect>`;
+      xCur += w;
+    }
+    // 有效工時（綠）
+    if (g.effectiveMin > 0) {
+      const w = toX(g.effectiveMin);
+      html += `<rect x="${xCur}" y="${y}" width="${w}" height="${barH}" fill="#3CB99A" fill-opacity="0.85"><title>${g.bundleId}｜有效工時 ${g.effectiveMin}分</title></rect>`;
+      xCur += w;
+    }
+
+
+    // Y 軸組別標籤
+    const labelColor = getBundleColor(g.bundleId);
+    html += `<text x="${ML-4}" y="${y + barH/2 + 4}" text-anchor="end" font-size="10" fill="${labelColor}">${g.bundleId}</text>`;
+  });
+
+  svg.innerHTML = html;
+
+  // 右側圖例
+  leg.innerHTML = `
+    <div class="leg-group-title">工時類型</div>
+    <div class="leg-item"><div class="leg-rect" style="background:#4b5563;width:14px;height:10px"></div><span>組間等待</span></div>
+    <div class="leg-item"><div class="leg-rect" style="background:#60a5fa;width:14px;height:10px"></div><span>空車工時</span></div>
+    <div class="leg-item"><div class="leg-rect" style="background:#3CB99A;width:14px;height:10px"></div><span>有效工時</span></div>
+
+    <div class="leg-group-title">訂單組</div>
+    ${groups.map(g=>`<div class="leg-item"><div class="leg-dot" style="background:${getBundleColor(g.bundleId)}"></div><span>${g.bundleId}</span></div>`).join('')}
+  `;
+}
+
+
+</script>
+</body>
+</html>
