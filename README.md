@@ -29,7 +29,59 @@ The App produces a structured Excel file. The Analyzer ingests it. Same data, tw
 
 ---
 
+## What the Analyzer Shows
+
+### 地理軌跡圖 — Where did you actually ride?
+
+![Geographic Route Map](https://github.com/user-attachments/assets/985aeac3-08d3-4401-83c9-21d7fbca5cf8)
+
+Each color represents one order group. Node shapes distinguish dispatch notifications (circle), pickup (square), and delivery (triangle). Reveals geographic patterns: which zones cluster, how far each order pulls you from base.
+
+---
+
+### 時間效率分析 — What is your real NTD/min?
+
+![Time Efficiency Analysis](https://github.com/user-attachments/assets/b8c1bb93-812c-4991-a7e7-d3c355fa22ff)
+
+Cumulative NTD/min (green line) vs. instantaneous NTD/min per delivery (orange diamonds). The dashed line shows session average. Early high-value orders pull the average up; long-distance late orders drag it down.
+
+---
+
+### 空車率分析 — How much distance are you riding empty?
+
+![Empty-Run Rate Analysis](https://github.com/user-attachments/assets/b6affed3-ed63-4fa4-bb03-d1ba93219c40)
+
+Blue = distance with active cargo. Gray = empty distance. Orange dashed line = empty-run rate per hour. High empty-run rate in the first hour is normal (cold start); sustained high rate signals poor dispatch zone positioning.
+
+---
+
+### Time Efficiency — Revenue vs. Trip Time
+
+![Time Efficiency Scatter](https://github.com/user-attachments/assets/49ccd7a7-ee13-4889-9e79-2dc1bee9fa7b)
+
+Scatter plot of revenue (NTD) vs. trip time (minutes) per order group. Pink regression = all orders (~180 NTD/hr). Green regression = top 25% efficient orders (~300 NTD/hr). Outliers above the green line are the orders worth chasing.
+
+---
+
+### 工作時段分布 — Which hour has the most waiting?
+
+![Work Period Distribution](https://github.com/user-attachments/assets/4581e199-7643-4494-8806-a94d34b349a3)
+
+Stacked bar chart per hour: waiting (purple), pickup (orange), delivery (green), intercept (pink), multi-pickup (yellow). Thick green = efficient hour. Thick purple = you're sitting still. Identifies the dead hours worth avoiding.
+
+---
+
+### 每組工時結構 — Effective vs. empty time per order
+
+![Per-Order Time Structure](https://github.com/user-attachments/assets/5ac71bc9-14b9-4c76-91a0-c7f065c46e3b)
+
+Horizontal bar per order group: green = effective riding time, blue = empty riding time, gray = inter-order wait. Long blue bars = dispatch sent you too far from the next pickup. Long gray bars = platform slow to assign next order.
+
+---
+
 ## Tool 1 — Delivery Tracker App (Android)
+
+![App Screenshot](https://github.com/user-attachments/assets/2596aebd-73c9-4036-8cc7-6effcc073760)
 
 ### Download
 
@@ -42,7 +94,7 @@ The App produces a structured Excel file. The Analyzer ingests it. Same data, tw
 - **One-tap state machine** — idle → staking → notified → picking → delivered; each tap timestamps the transition
 - **GPS recording** — captures coordinates at each state change via browser Geolocation API
 - **Live weather** — temperature, precipitation, wind speed from Open-Meteo (no API key required)
-- **Route segment classification** — waiting segment, dispatch segment, pickup-to-delivery segment, intercept segment
+- **Route segment classification** — waiting, dispatch, pickup-to-delivery, intercept, multi-pickup segments
 - **Excel export** — one-tap export via Capacitor Filesystem; structured for direct import into the Analyzer
 - **Taiwan holiday detection** — flags national holidays for comparative analysis
 
@@ -74,27 +126,13 @@ const isNative = window.Capacitor?.isNativePlatform?.();
 
 **Live Demo → [wutesta0101-hue.github.io/delivery-tracker](https://wutesta0101-hue.github.io/delivery-tracker)**
 
-A desktop web tool that ingests the Excel file exported by the App and produces performance analytics.
-
-### Features
-
-- **Import** — drag-and-drop the App's Excel export
-- **Route efficiency regression** — distance vs. time scatter with trend line
-- **Empty-run rate** — percentage of distance traveled without an active order
-- **Time distribution** — breakdown of working hours by segment type
-- **Revenue burn rate** — earnings per minute across different time windows
-- **NTD/min efficiency** — real effective hourly rate excluding wait time
-- **Geographic heatmap** — pickup/delivery location density
-
-### Tech Stack
-
-Pure HTML + JavaScript, no build step required. Runs entirely in the browser.
+A desktop web tool that ingests the Excel file exported by the App and produces performance analytics. Pure HTML + JavaScript, no build step, runs entirely in the browser.
 
 | Library | Purpose |
 |---|---|
 | SheetJS | Excel file parsing |
 | Chart.js | Statistical charts |
-| Leaflet | Geographic visualization |
+| D3.js | Geographic route map |
 
 ---
 
@@ -108,23 +146,6 @@ delivery-tracker/
 │   └── index.html               ← Web analyzer (GitHub Pages)
 └── README.md
 ```
-
----
-
-## Data Flow Detail
-
-The App exports an Excel file with one row per delivery segment:
-
-| Column | Description |
-|---|---|
-| 路段語意 | Segment type (waiting / dispatch / pickup / intercept) |
-| 累計距離_公尺 | Cumulative distance (meters) |
-| 時間戳記 | Timestamp of state transition |
-| GPS座標 | Latitude / longitude at transition |
-| 天氣_降雨量 | Precipitation at time of recording |
-| 收入 | Declared earnings for this order |
-
-The Analyzer reads this schema directly — no transformation needed.
 
 ---
 
