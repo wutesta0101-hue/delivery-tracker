@@ -152,3 +152,4 @@ delivery-tracker/
 ## Related
 
 - [3D Container Packing System](https://github.com/wutesta0101-hue/container-packing) — BLB bin-packing with forklift aisle constraints
+- [Container Arrival Tracker](https://github.com/wutesta0101-hue/container-arrival-tracker) — Zero-infrastructure warehouse arrival tracking
