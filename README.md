@@ -85,7 +85,7 @@ Horizontal bar per order group: green = effective riding time, blue = empty ridi
 
 ### Download
 
-**[⬇ Download APK](app/delivery-tracker.apk)**
+**[⬇ Download APK](https://github.com/wutesta0101-hue/delivery-tracker/tree/master/app)**
 
 > Requires Android 8.0+. Allow installation from unknown sources in Settings → Security.
 
